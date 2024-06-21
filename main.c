@@ -12,6 +12,11 @@
         exit(-1); \
     } while (0);
 
+typedef struct Cell {
+    bool alive;
+    short neighbors;
+} Cell;
+
 int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
 
@@ -32,7 +37,7 @@ int main(int argc, char **argv) {
             handle_error("HEIGHT not a number or too long\n")
 
         TILE = (int) strtol(argv[3], &p, 10);
-        if (errno != 0 || *p != '\0' || TILE > INT_MAX || TILE < INT_MIN)
+        if (errno != 0 || *p != '\0' || TILE > HEIGHT || TILE > WIDTH || TILE < 1)
             handle_error("TILE not a number or too long\n")
 
     }
@@ -41,6 +46,7 @@ int main(int argc, char **argv) {
     const int W_TILES = WIDTH / TILE;
     const int H_TILES = HEIGHT / TILE;
 
+    SetWindowState(FLAG_WINDOW_RESIZABLE);
     InitWindow(WIDTH, HEIGHT, "Game of Life");
     SetTargetFPS(60);
 
@@ -51,14 +57,20 @@ int main(int argc, char **argv) {
     Vector2 relPos;
 
     // declare and initialize board
-    bool board[W_TILES][H_TILES];
+    Cell board[W_TILES][H_TILES];
     for (int i = 0; i < W_TILES; i++) {
         for (int j = 0; j < H_TILES; j++) {
-            board[i][j] = false;
+            board[i][j].alive = false;
+            board[i][j].neighbors = 0;
         }
     }
     // declare secondary board
-    bool buffBoard[W_TILES][H_TILES];
+    Cell buffBoard[W_TILES][H_TILES];
+
+    Cell cleanBoard[W_TILES][H_TILES];
+    memcpy(cleanBoard, board, sizeof board);
+
+
 
     Vector2 mousePos;
     int dx, dy;
@@ -91,11 +103,11 @@ int main(int argc, char **argv) {
         } else {
             // place a cell
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                board[dx][dy] = true;
+                board[dx][dy].alive = true;
             }
                 // remove cell
             else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-                board[dx][dy] = false;
+                board[dx][dy].alive = false;
             }
         }
 
@@ -128,36 +140,45 @@ int main(int argc, char **argv) {
 
         // hold to run
         if (IsKeyDown(KEY_E) || running) {
+            memcpy(buffBoard, cleanBoard, sizeof board);
             memcpy(buffBoard, board, sizeof board);
             for (int i = 0; i < W_TILES; i++) {
                 for (int j = 0; j < H_TILES; j++) {
-                    total = 0;
-                    for (int d = 0; d < 8; d++) {
-                        int newX = i + directions[d][0];
-                        int newY = j + directions[d][1];
-                        if (newX >= 0 && newX < W_TILES && newY >= 0 && newY < H_TILES) {
-                            if (board[newX][newY]) {
-                                total++;
+
+                    if (board[i][j].alive) {
+                        total = 0;
+                        for (int d = 0; d < 8; d++) {
+                            int newX = i + directions[d][0];
+                            int newY = j + directions[d][1];
+                            if (newX >= 0 && newX < W_TILES && newY >= 0 && newY < H_TILES) {
+                                if (board[newX][newY].alive) {
+                                    total++;
+                                } else {
+                                    buffBoard[newX][newY].neighbors++;
+                                }
                             }
                         }
                     }
-                    if (total < 2 || total > 3) {
-                        buffBoard[i][j] = false;
+                }
+            }
+            for (int i = 0; i < W_TILES; i++) {
+                for (int j = 0; j < H_TILES; j++) {
+                    if (!buffBoard[i][j].alive && buffBoard[i][j].neighbors == 3){
+                        buffBoard[i][j].alive = true;
+                        buffBoard[i][j].neighbors = 0;
                     }
-                    if (total == 3 && !board[i][j]) {
-                        buffBoard[i][j] = true;
-                    }
-
                 }
             }
             memcpy(board, buffBoard, sizeof board);
+            memcpy(buffBoard, cleanBoard, sizeof board);
         }
 
         // reset
         if (IsKeyPressed(KEY_R)) {
             for (int i = 0; i < W_TILES; i++) {
                 for (int j = 0; j < H_TILES; j++) {
-                    board[i][j] = false;
+                    board[i][j].alive = false;
+                    board[i][j].neighbors = 0;
                 }
             }
         }
@@ -174,7 +195,7 @@ int main(int argc, char **argv) {
             dx = i * TILE;
             for (int j = 0; j < H_TILES; j++) {
                 dy = j * TILE;
-                if (board[i][j]) {
+                if (board[i][j].alive) {
                     DrawRectangle(dx, dy, TILE, TILE, BLACK);
                 } else {
                     DrawRectangle(dx, dy, TILE, TILE, WHITE);
@@ -183,11 +204,25 @@ int main(int argc, char **argv) {
             }
         }
 
-        EndMode2D();
-        char zoomText[32];
-        sprintf(zoomText, "Zoom: %.2f", camera.zoom);
+        dx = (int) relPos.x - ((int) relPos.x % TILE);
+        dy = (int) relPos.y - ((int) relPos.y % TILE);
 
-        DrawText(zoomText , 10, 10, 24, YELLOW);
+        DrawRectangle(dx, dy, TILE, TILE, GRAY);
+
+        EndMode2D();
+        char Text[32];
+
+        sprintf(Text, "Zoom: %.2f", camera.zoom);
+        DrawText(Text , 10, 10, 24, YELLOW);
+
+        dx = (int) relPos.x / TILE;
+        dy = (int) relPos.y / TILE;
+
+        sprintf(Text, "Neighbors: %d", board[dx][dy].neighbors);
+        DrawText(Text , 10, 30, 24, YELLOW);
+
+        sprintf(Text, "Mouse rel: %f, %f", relPos.x, relPos.y);
+        DrawText(Text , 10, 50, 24, YELLOW);
 
         EndDrawing();
     }
