@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -43,6 +44,12 @@ int main(int argc, char **argv) {
     InitWindow(WIDTH, HEIGHT, "Game of Life");
     SetTargetFPS(60);
 
+    // camera
+    Camera2D camera = { 0 };
+    camera.zoom = 1.0f;
+
+    Vector2 relPos;
+
     // declare and initialize board
     bool board[W_TILES][H_TILES];
     for (int i = 0; i < W_TILES; i++) {
@@ -53,10 +60,10 @@ int main(int argc, char **argv) {
     // declare secondary board
     bool buffBoard[W_TILES][H_TILES];
 
-    Vector2 mousePos = {0, 0};
+    Vector2 mousePos;
     int dx, dy;
 
-    int total = 0;
+    int total;
     int directions[8][2] = {
             {-1, -1}, {-1, 0}, {-1, 1},
             { 0, -1},          { 0, 1},
@@ -67,19 +74,52 @@ int main(int argc, char **argv) {
 
     while (!WindowShouldClose()) {
 
+        //----------------------------------------------------------------------------------
         // mouse input
         mousePos = GetMousePosition();
-        dx = (int) mousePos.x / TILE;
-        dy = (int) mousePos.y / TILE;
+        relPos = GetScreenToWorld2D(mousePos, camera);
+        dx = (int) relPos.x / TILE;
+        dy = (int) relPos.y / TILE;
 
-        // place a cell
-        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            board[dx][dy] = true;
+        // Translate based on mouse click
+        if (IsKeyDown(KEY_SPACE)) {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+                Vector2 delta = GetMouseDelta();
+                delta = Vector2Scale(delta, -1.0f/camera.zoom);
+                camera.target = Vector2Add(camera.target, delta);
+            }
+        } else {
+            // place a cell
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                board[dx][dy] = true;
+            }
+                // remove cell
+            else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+                board[dx][dy] = false;
+            }
         }
-        // remove cell
-        else if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-            board[dx][dy] = false;
+
+        // Zoom based on mouse wheel
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0) {
+            // Get the world point that is under the mouse
+            Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+
+            // Set the offset to where the mouse is
+            camera.offset = GetMousePosition();
+
+            // Set the target to match, so that the camera maps the world space point
+            // under the cursor to the screen space point under the cursor at any zoom
+            camera.target = mouseWorldPos;
+
+            // Zoom increment
+            float scaleFactor = 1.0f + (0.1f*fabsf(wheel));
+            if (wheel < 0) scaleFactor = 1.0f/scaleFactor;
+            camera.zoom = Clamp(camera.zoom*scaleFactor, 0.125f, 64.0f);
         }
+
+        //----------------------------------------------------------------------------------
+        // key input
 
         // start/stop running
         if (IsKeyPressed(KEY_W)) {
@@ -122,8 +162,13 @@ int main(int argc, char **argv) {
             }
         }
 
+        //----------------------------------------------------------------------------------
+        // draw
+
         BeginDrawing();
         ClearBackground(BLACK);
+
+        BeginMode2D(camera);
 
         for (int i = 0; i < W_TILES; i++) {
             dx = i * TILE;
@@ -137,6 +182,12 @@ int main(int argc, char **argv) {
                 }
             }
         }
+
+        EndMode2D();
+        char zoomText[32];
+        sprintf(zoomText, "Zoom: %.2f", camera.zoom);
+
+        DrawText(zoomText , 10, 10, 24, YELLOW);
 
         EndDrawing();
     }
