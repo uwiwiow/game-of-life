@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <time.h>
 
 #define handle_error(msg) \
     do { \
@@ -20,9 +21,9 @@ typedef struct Cell {
 int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
 
-    int WIDTH = 800;
-    int HEIGHT = 800;
-    int TILE = 4;
+    int WIDTH = 1920;
+    int HEIGHT = 1080;
+    int TILE = 8;
 
     if (argc >= 4) {
         char *p;
@@ -50,6 +51,11 @@ int main(int argc, char **argv) {
     InitWindow(WIDTH, HEIGHT, "Game of Life");
     SetTargetFPS(60);
 
+    HideCursor();
+
+    if (!IsWindowFullscreen())
+        ToggleFullscreen();
+
     // camera
     Camera2D camera = { 0 };
     camera.zoom = 1.0f;
@@ -70,8 +76,6 @@ int main(int argc, char **argv) {
     Cell cleanBoard[W_TILES][H_TILES];
     memcpy(cleanBoard, board, sizeof board);
 
-
-
     Vector2 mousePos;
     int dx, dy;
 
@@ -83,6 +87,13 @@ int main(int argc, char **argv) {
     };
 
     int running = false;
+    bool showInfo = false;
+
+    int r = 0;
+    int g = 0;
+    int b = 0;
+
+    int colormode = 0;
 
     while (!WindowShouldClose()) {
 
@@ -151,11 +162,7 @@ int main(int argc, char **argv) {
                             int newX = i + directions[d][0];
                             int newY = j + directions[d][1];
                             if (newX >= 0 && newX < W_TILES && newY >= 0 && newY < H_TILES) {
-                                if (board[newX][newY].alive) {
-                                    total++;
-                                } else {
-                                    buffBoard[newX][newY].neighbors++;
-                                }
+                                buffBoard[newX][newY].neighbors++;
                             }
                         }
                     }
@@ -165,7 +172,6 @@ int main(int argc, char **argv) {
                 for (int j = 0; j < H_TILES; j++) {
                     if (!buffBoard[i][j].alive && buffBoard[i][j].neighbors == 3){
                         buffBoard[i][j].alive = true;
-                        buffBoard[i][j].neighbors = 0;
                     }
                 }
             }
@@ -183,8 +189,27 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (IsKeyPressed(KEY_F1)) {
+            showInfo = !showInfo;
+        }
+
+        if (IsKeyPressed(KEY_F2)) {
+            colormode = (colormode + 1) % 3;
+        }
+
         //----------------------------------------------------------------------------------
         // draw
+
+
+        if (r+ 10 < 255) {
+            r += 10;
+        } else if (g+10 < 255) {
+            g += 10;
+        } else if (b+10 < 255) {
+            b += 10;
+        } else {
+            r = g = b = 0;
+        }
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -196,7 +221,17 @@ int main(int argc, char **argv) {
             for (int j = 0; j < H_TILES; j++) {
                 dy = j * TILE;
                 if (board[i][j].alive) {
-                    DrawRectangle(dx, dy, TILE, TILE, BLACK);
+                    switch (colormode) {
+                        case 0:
+                            DrawRectangle(dx, dy, TILE, TILE, BLACK);
+                            break;
+                        case 1:
+                            DrawRectangle(dx, dy, TILE, TILE, (Color) {board[i][j].neighbors,  board[i][j].neighbors, board[i][j].neighbors, 255});
+                            break;
+                        case 2:
+                            DrawRectangle(dx, dy, TILE, TILE, (Color) {board[i][j].neighbors + r,  board[i][j].neighbors+ g, board[i][j].neighbors+ b, 255});
+                            break;
+                    }
                 } else {
                     DrawRectangle(dx, dy, TILE, TILE, WHITE);
 
@@ -212,17 +247,19 @@ int main(int argc, char **argv) {
         EndMode2D();
         char Text[32];
 
-        sprintf(Text, "Zoom: %.2f", camera.zoom);
-        DrawText(Text , 10, 10, 24, YELLOW);
+        if (showInfo) {
+            sprintf(Text, "Zoom: %.2f", camera.zoom);
+            DrawText(Text , 10, 10, 24, YELLOW);
 
-        dx = (int) relPos.x / TILE;
-        dy = (int) relPos.y / TILE;
+            dx = (int) relPos.x / TILE;
+            dy = (int) relPos.y / TILE;
 
-        sprintf(Text, "Neighbors: %d", board[dx][dy].neighbors);
-        DrawText(Text , 10, 30, 24, YELLOW);
+            sprintf(Text, "Neighbors: %d", board[dx][dy].neighbors);
+            DrawText(Text , 10, 30, 24, YELLOW);
 
-        sprintf(Text, "Mouse rel: %f, %f", relPos.x, relPos.y);
-        DrawText(Text , 10, 50, 24, YELLOW);
+            sprintf(Text, "Mouse rel: %f, %f", relPos.x, relPos.y);
+            DrawText(Text , 10, 50, 24, YELLOW);
+        }
 
         EndDrawing();
     }
